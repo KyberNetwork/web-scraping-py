@@ -1,12 +1,10 @@
 from typing import *
-from logzero import logger as log
 from bs4 import BeautifulSoup as Bs
 import requests
 
 
 def get_page(path: str, write_file: bool = False, read_cache: bool = False) -> Tuple[Bs, str]:
     if read_cache:
-        log.info("Read from cache")
         f = open("content.txt", "r")
         content = f.read()
         f.close()
@@ -20,7 +18,6 @@ def get_page(path: str, write_file: bool = False, read_cache: bool = False) -> T
     }
 
     session = requests.Session()
-    log.info(f"Retrieving: {path}")
     resp = session.get(path, headers=headers)
 
     if write_file:
@@ -56,17 +53,17 @@ def read_holders(html: Bs) -> List[Tuple[str, str, float, float]]:
     holders = []
 
     for row in html.select("tr")[1:]:
-        holder_name = row.select("a[target=_parent]")[0].getText()
-        log.debug(holder_name)
-
-        tooltip = row.select("a[data-bs-toggle=tooltip]")[0]
-        holder_address = tooltip.get("data-clipboard-text", tooltip.get("title"))
-        log.debug(holder_address)
-
-        quantity = float(row.select("td")[2].getText().replace(",", ""))
-        value_in_str = row.select("td")[4].getText()
-        value_as_float = float(value_in_str[1:].replace(",", ""))
-        holders.append((holder_name, holder_address, quantity, value_as_float))
+        try:
+            holder_name = row.select("a[target=_parent]")[0].getText()
+            tooltip = row.select("a.link-secondary[data-bs-toggle=tooltip]")[0]
+            holder_address = tooltip.get("data-clipboard-text") or tooltip.get("title")
+            quantity = float(row.select("td")[2].getText().replace(",", ""))
+            value_in_str = row.select("td")[4].getText()
+            value_as_float = float(value_in_str[1:].replace(",", ""))
+            holders.append((holder_name, holder_address, quantity, value_as_float))
+        except Exception as e:
+            # Possibly no holders info
+            continue
 
     return holders
 
@@ -93,6 +90,10 @@ def read_top_holders(token_addr: str, top: int = 50) -> List[Tuple[str, str, flo
         html, _ = get_page(url)
         holders = read_holders(html)
         result += holders
+
+        if len(holders) < 50:
+            break
+
         page += 1
 
     return result
